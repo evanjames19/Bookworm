@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+<<<<<<< HEAD
 import { Book, TextChunk, Character, PlaybackState } from '../types';
+=======
+import { Book, BookVersion, TextChunk, Character, PlaybackState } from '../types';
+
+export type ArtStyle = 'realistic' | 'cinematic' | 'artistic' | 'anime' | 'vintage';
+>>>>>>> 305614773245d26d9c7a7f4491e6c41501d20831
 
 interface AppState {
   books: Book[];
@@ -11,15 +17,29 @@ interface AppState {
   playbackState: PlaybackState;
   isLoading: boolean;
   loadingMessage: string;
+<<<<<<< HEAD
   
   setBooks: (books: Book[]) => void;
   addBook: (book: Book) => void;
+=======
+  artStyle: ArtStyle;
+  
+  setBooks: (books: Book[]) => void;
+  addBook: (book: Book) => void;
+  removeBook: (bookId: string) => void;
+>>>>>>> 305614773245d26d9c7a7f4491e6c41501d20831
   setCurrentBook: (book: Book | null) => void;
   setChunks: (chunks: TextChunk[]) => void;
   setCurrentChunk: (chunk: TextChunk | null) => void;
   updateCharacter: (name: string, character: Character) => void;
   setPlaybackState: (state: Partial<PlaybackState>) => void;
   setLoading: (isLoading: boolean, message?: string) => void;
+<<<<<<< HEAD
+=======
+  setArtStyle: (style: ArtStyle) => void;
+  saveBookVersion: (versionName: string) => Promise<void>;
+  loadBookVersion: (bookId: string, versionId: string) => Promise<void>;
+>>>>>>> 305614773245d26d9c7a7f4491e6c41501d20831
   saveProgress: () => Promise<void>;
   loadBooks: () => Promise<void>;
 }
@@ -38,6 +58,10 @@ export const useStore = create<AppState>((set, get) => ({
   },
   isLoading: false,
   loadingMessage: '',
+<<<<<<< HEAD
+=======
+  artStyle: 'realistic',
+>>>>>>> 305614773245d26d9c7a7f4491e6c41501d20831
 
   setBooks: (books) => set({ books }),
   
@@ -47,6 +71,22 @@ export const useStore = create<AppState>((set, get) => ({
     await AsyncStorage.setItem('books', JSON.stringify(books));
   },
   
+<<<<<<< HEAD
+=======
+  removeBook: async (bookId) => {
+    const books = get().books.filter(book => book.id !== bookId);
+    set({ books });
+    await AsyncStorage.setItem('books', JSON.stringify(books));
+    
+    // Also remove any saved progress for this book
+    try {
+      await AsyncStorage.removeItem(`progress_${bookId}`);
+    } catch (error) {
+      console.error('Error removing book progress:', error);
+    }
+  },
+  
+>>>>>>> 305614773245d26d9c7a7f4491e6c41501d20831
   setCurrentBook: (book) => set({ currentBook: book }),
   
   setChunks: (chunks) => set({ chunks }),
@@ -67,6 +107,74 @@ export const useStore = create<AppState>((set, get) => ({
     set({ isLoading, loadingMessage: message });
   },
   
+<<<<<<< HEAD
+=======
+  setArtStyle: (style) => {
+    set({ artStyle: style });
+    AsyncStorage.setItem('artStyle', style);
+  },
+
+  saveBookVersion: async (versionName: string) => {
+    const { currentBook, chunks, artStyle } = get();
+    if (!currentBook || chunks.length === 0) {
+      console.warn('No book or chunks to save version');
+      return;
+    }
+
+    const version: BookVersion = {
+      id: `version_${Date.now()}`,
+      name: versionName,
+      artStyle: artStyle,
+      chunks: chunks.map(chunk => ({
+        ...chunk,
+        // Only include audio/image URLs if they exist and aren't placeholders
+        audioUrl: chunk.audioUrl && !chunk.audioUrl.includes('placeholder') ? chunk.audioUrl : undefined,
+        imageUrl: chunk.imageUrl && !chunk.imageUrl.includes('picsum.photos') ? chunk.imageUrl : undefined,
+      })),
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedBooks = get().books.map(book => {
+      if (book.id === currentBook.id) {
+        const existingVersions = book.savedVersions || [];
+        return {
+          ...book,
+          savedVersions: [...existingVersions, version],
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return book;
+    });
+
+    set({ books: updatedBooks });
+    await AsyncStorage.setItem('books', JSON.stringify(updatedBooks));
+    console.log(`✅ Saved book version: ${versionName}`);
+  },
+
+  loadBookVersion: async (bookId: string, versionId: string) => {
+    const { books } = get();
+    const book = books.find(b => b.id === bookId);
+    if (!book?.savedVersions) {
+      console.warn('Book or saved versions not found');
+      return;
+    }
+
+    const version = book.savedVersions.find(v => v.id === versionId);
+    if (!version) {
+      console.warn('Version not found');
+      return;
+    }
+
+    // Load the version's chunks and art style
+    set({ 
+      chunks: version.chunks,
+      artStyle: version.artStyle as ArtStyle,
+      currentBook: book,
+    });
+    console.log(`✅ Loaded book version: ${version.name}`);
+  },
+  
+>>>>>>> 305614773245d26d9c7a7f4491e6c41501d20831
   saveProgress: async () => {
     const { currentBook, playbackState } = get();
     if (currentBook) {
