@@ -1825,6 +1825,8 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
   const audioRef = useRef(null);
   const speechUtteranceRef = useRef(null);
   const highlightInterval = useRef(null);
+  const autoPlayTimeoutRef = useRef(null);
+  const isTransitioningRef = useRef(false);
   
   // Helper function to generate content for a specific chunk
   const generateChunkContent = async (chunks, chunkIndex, artStyle, previousImageUrl, bookId) => {
@@ -1929,7 +1931,18 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
 
   const playAudio = async () => {
     const chunk = chunks[currentChunkIndex];
-    if (!chunk?.audioUrl) return;
+    if (!chunk?.audioUrl) {
+      console.warn('⚠️ No audio URL for chunk:', currentChunkIndex);
+      return;
+    }
+
+    // Prevent overlapping audio operations
+    if (isTransitioningRef.current) {
+      console.log('🔄 Already transitioning, skipping play request');
+      return;
+    }
+
+    console.log(`🎵 Playing audio for chunk ${currentChunkIndex}:`, chunk.text.substring(0, 50) + '...');
 
     // Ensure any previous audio is properly stopped
     pauseAudio();
@@ -1948,13 +1961,17 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
         speechUtteranceRef.current = new SpeechSynthesisUtterance(text);
         speechUtteranceRef.current.rate = 0.9;
         speechUtteranceRef.current.onend = () => {
+          console.log('🎤 Speech synthesis ended');
           setIsPlaying(false);
           setHighlightedWordIndex(-1);
           if (highlightInterval.current) {
             clearInterval(highlightInterval.current);
             highlightInterval.current = null;
           }
-          setTimeout(handleNextChunk, 500);
+          // Only transition if not already transitioning
+          if (!isTransitioningRef.current) {
+            setTimeout(handleNextChunk, 500);
+          }
         };
         
         // Start word highlighting animation
@@ -1994,9 +2011,13 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
           };
           
           audioRef.current.onended = () => {
+            console.log('🔊 Audio playback ended');
             setIsPlaying(false);
             setHighlightedWordIndex(-1);
-            setTimeout(handleNextChunk, 500);
+            // Only transition if not already transitioning
+            if (!isTransitioningRef.current) {
+              setTimeout(handleNextChunk, 500);
+            }
           };
           
           audioRef.current.onerror = (error) => {
@@ -2038,8 +2059,15 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
       highlightInterval.current = null;
     }
     
+    // Clear auto-play timeout
+    if (autoPlayTimeoutRef.current) {
+      clearTimeout(autoPlayTimeoutRef.current);
+      autoPlayTimeoutRef.current = null;
+    }
+    
     setIsPlaying(false);
     setHighlightedWordIndex(-1);
+    isTransitioningRef.current = false;
   };
 
   const handlePlayPause = () => {
@@ -2051,9 +2079,27 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
   };
 
   const handleNextChunk = async () => {
-    if (currentChunkIndex < chunks.length - 1) {
+    if (currentChunkIndex >= chunks.length - 1) {
+      console.log('📖 Story complete!');
+      setIsPlaying(false);
+      return;
+    }
+
+    // Prevent multiple simultaneous transitions
+    if (isTransitioningRef.current) {
+      console.log('🔄 Already transitioning to next chunk, ignoring request');
+      return;
+    }
+
+    isTransitioningRef.current = true;
+    console.log(`📄 Transitioning from chunk ${currentChunkIndex} to ${currentChunkIndex + 1}`);
+
+    try {
       const nextIndex = currentChunkIndex + 1;
       const nextChunk = chunks[nextIndex];
+      
+      // Stop current audio and clear any pending auto-play
+      pauseAudio();
       
       // Only show loading if content isn't ready yet
       if (!nextChunk.imageUrl || !nextChunk.audioUrl) {
@@ -2079,7 +2125,7 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
           }
           
           await Promise.all(promises);
-          console.log('Next chunk ready');
+          console.log(`✅ Next chunk ${nextIndex} ready`);
         } catch (error) {
           console.error('Error generating next chunk:', error);
         } finally {
@@ -2093,19 +2139,12 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
         setTimeout(() => {
           const futureChunk = chunks[futureIndex];
           if (!futureChunk.imageUrl) {
-            apiService.generateImage(futureChunk.text, artStyle, nextChunk.imageUrl)
-              .then(img => {
-                futureChunk.imageUrl = img;
-                return apiService.generateAudio(futureChunk.text, currentBook.id, futureIndex);
-              })
-              .then(audio => {
-                futureChunk.audioUrl = audio;
-              })
-              .catch(err => console.error(`Background generation failed for chunk ${futureIndex}:`, err));
+            generateChunkContent(chunks, futureIndex, artStyle, nextChunk.imageUrl, currentBook.id);
           }
         }, 1000); // Start after a brief delay
       }
       
+      // Update the UI state
       setCurrentChunkIndex(nextIndex);
       setCurrentImage(nextChunk.imageUrl);
       setIsPlaying(false);
@@ -2113,19 +2152,21 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
       // Reset text highlighting
       setHighlightedWordIndex(-1);
       setCurrentWords([]);
-      if (highlightInterval.current) {
-        clearInterval(highlightInterval.current);
-      }
       
       // Auto-play the next chunk after a brief pause for smooth transition
-      setTimeout(async () => {
+      autoPlayTimeoutRef.current = setTimeout(async () => {
         console.log(`🎬 Auto-playing chunk ${nextIndex}`);
         try {
           await playAudio();
         } catch (error) {
           console.error('Auto-play failed:', error);
+        } finally {
+          isTransitioningRef.current = false;
         }
       }, 800);
+    } catch (error) {
+      console.error('Error in handleNextChunk:', error);
+      isTransitioningRef.current = false;
     }
   };
 
