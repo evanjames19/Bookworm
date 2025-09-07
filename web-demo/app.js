@@ -386,45 +386,150 @@ ESTABLISH CHARACTER DESIGNS:
 
 // Enhanced text chunking
 function chunkText(text) {
-  console.log('Chunking text of length:', text.length);
+  console.log('🔍 Chunking text of length:', text.length, 'words:', text.split(/\s+/).length);
   
-  // Split by sentences first
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-  console.log('Found sentences:', sentences.length);
+  // First try paragraph-based chunking
+  const paragraphs = text.split(/\n\n+/).filter(p => p.trim());
+  console.log('📄 Found paragraphs:', paragraphs.length);
+  
+  if (paragraphs.length <= 1) {
+    // No clear paragraph breaks, use sentence-based chunking
+    return chunkBySentences(text);
+  }
   
   const chunks = [];
   let currentChunk = '';
+  let currentWordCount = 0;
   let chunkId = 0;
-
-  for (const sentence of sentences) {
-    const trimmedSentence = sentence.trim();
+  const CHUNK_TARGET_SIZE = 100; // Target words per chunk
+  const MIN_CHUNK_SIZE = 50;
+  const MAX_CHUNK_SIZE = 200;
+  
+  for (const paragraph of paragraphs) {
+    const trimmedParagraph = paragraph.trim();
+    if (!trimmedParagraph) continue;
     
-    // If adding this sentence would make the chunk too long, finalize current chunk
-    if (currentChunk.length > 0 && (currentChunk.length + trimmedSentence.length) > 600) {
+    const paragraphWords = trimmedParagraph.split(/\s+/).length;
+    
+    // If adding this paragraph would exceed max size, finalize current chunk
+    if (currentWordCount > 0 && currentWordCount + paragraphWords > MAX_CHUNK_SIZE) {
       chunks.push({
         id: `chunk_${chunkId++}`,
         text: currentChunk.trim(),
         audioUrl: null,
         imageUrl: null
       });
-      currentChunk = '';
+      
+      // Start new chunk
+      currentChunk = trimmedParagraph;
+      currentWordCount = paragraphWords;
+    } else {
+      // Add paragraph to current chunk
+      currentChunk += (currentChunk ? '\n\n' : '') + trimmedParagraph;
+      currentWordCount += paragraphWords;
+      
+      // If we've reached target size and have meaningful content, create chunk
+      if (currentWordCount >= CHUNK_TARGET_SIZE && currentWordCount >= MIN_CHUNK_SIZE) {
+        chunks.push({
+          id: `chunk_${chunkId++}`,
+          text: currentChunk.trim(),
+          audioUrl: null,
+          imageUrl: null
+        });
+        
+        // Reset for next chunk
+        currentChunk = '';
+        currentWordCount = 0;
+      }
     }
+  }
+  
+  // Add any remaining text as final chunk
+  if (currentChunk.trim()) {
+    chunks.push({
+      id: `chunk_${chunkId++}`,
+      text: currentChunk.trim(),
+      audioUrl: null,
+      imageUrl: null
+    });
+  }
+  
+  // Fallback: if still only one chunk, force sentence-based splitting
+  if (chunks.length <= 1) {
+    console.log('⚠️ Paragraph chunking failed, using sentence chunking');
+    return chunkBySentences(text);
+  }
+  
+  const result = chunks.slice(0, 12); // Allow up to 12 chunks for better stories
+  console.log('✅ Created', result.length, 'paragraph-based chunks');
+  return result;
+}
+
+// Fallback chunker for when paragraph chunking doesn't work
+function chunkBySentences(text) {
+  console.log('📝 Using sentence-based chunking');
+  
+  // Split by sentences while preserving punctuation
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  console.log('Found sentences:', sentences.length);
+  
+  const chunks = [];
+  let currentChunk = '';
+  let currentWordCount = 0;
+  let chunkId = 0;
+  const CHUNK_TARGET_SIZE = 80; // Smaller target for sentence-based
+  const MAX_CHUNK_SIZE = 150;
+
+  for (const sentence of sentences) {
+    const trimmedSentence = sentence.trim();
+    if (!trimmedSentence) continue;
     
-    currentChunk += (currentChunk ? ' ' : '') + trimmedSentence;
+    const sentenceWords = trimmedSentence.split(/\s+/).length;
+    
+    // If adding this sentence would make the chunk too long, finalize current chunk
+    if (currentWordCount > 0 && currentWordCount + sentenceWords > MAX_CHUNK_SIZE) {
+      chunks.push({
+        id: `chunk_${chunkId++}`,
+        text: currentChunk.trim(),
+        audioUrl: null,
+        imageUrl: null
+      });
+      currentChunk = trimmedSentence;
+      currentWordCount = sentenceWords;
+    } else {
+      // Add sentence to current chunk
+      currentChunk += (currentChunk ? ' ' : '') + trimmedSentence;
+      currentWordCount += sentenceWords;
+      
+      // Create chunk if we've reached target size OR have multiple sentences
+      if (currentWordCount >= CHUNK_TARGET_SIZE || 
+          (currentWordCount >= 30 && currentChunk.includes('.') && currentChunk.split(/[.!?]/).length >= 2)) {
+        chunks.push({
+          id: `chunk_${chunkId++}`,
+          text: currentChunk.trim(),
+          audioUrl: null,
+          imageUrl: null
+        });
+        
+        // Reset for next chunk
+        currentChunk = '';
+        currentWordCount = 0;
+      }
+    }
   }
 
   // Add the final chunk if there's remaining content
   if (currentChunk.trim()) {
     chunks.push({
-      id: `chunk_${chunkId}`,
+      id: `chunk_${chunkId++}`,
       text: currentChunk.trim(),
       audioUrl: null,
       imageUrl: null
     });
   }
 
-  const result = chunks.slice(0, 10); // Limit to 10 chunks for demo
-  console.log('Created chunks:', result.length);
+  const result = chunks.slice(0, 12); // Allow up to 12 chunks
+  console.log('✅ Created', result.length, 'sentence-based chunks');
   return result;
 }
 
@@ -1201,8 +1306,28 @@ function AddBookModal({ onClose, onAddBook, apiService }) {
       let finalContent = content.trim();
       
       if (mode === 'idea') {
-        // Generate story from idea using Gemini
-        const prompt = `Write a complete short story (800-1200 words) based on this idea: ${content}. Make it engaging with dialogue, character development, and vivid descriptions.`;
+        // Generate story from idea using Gemini - enhanced prompt for better storytelling
+        const prompt = `You are a professional storyteller. Create a complete, engaging short story (1200-1800 words) based on this idea: "${content}"
+
+REQUIREMENTS:
+- Write a complete narrative with clear beginning, middle, and end
+- Include vivid character descriptions and personalities
+- Add rich environmental details and atmospheric descriptions
+- Include dialogue that reveals character and advances plot
+- Create engaging scenes that will translate well to visual imagery
+- Use descriptive language that will help AI generate consistent, beautiful illustrations
+- Structure the story in clear paragraphs that can be easily chunked
+- Make it suitable for audiovisual presentation with narration
+- Ensure each scene has enough visual detail for image generation
+
+STYLE:
+- Professional creative writing
+- Rich sensory details
+- Engaging dialogue
+- Clear scene transitions
+- Memorable characters with distinct appearances
+
+Write the complete story now:`;
         
         try {
           const response = await fetch(
@@ -1213,9 +1338,10 @@ function AddBookModal({ onClose, onAddBook, apiService }) {
               body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                  temperature: 0.8,
-                  topP: 0.9,
-                  maxOutputTokens: 2048,
+                  temperature: 0.9,
+                  topP: 0.95,
+                  maxOutputTokens: 4096,
+                  topK: 40,
                 }
               })
             }
@@ -1224,12 +1350,20 @@ function AddBookModal({ onClose, onAddBook, apiService }) {
           if (response.ok) {
             const data = await response.json();
             const generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (generatedText) {
+            if (generatedText && generatedText.length > 200) {
+              console.log('Generated story length:', generatedText.length);
               finalContent = generatedText.trim();
+            } else {
+              console.warn('Generated story too short, using original idea as fallback');
+              finalContent = `Based on your idea: ${content}\n\nThis is a placeholder story. The AI story generation may have failed. Please try creating the story again or paste your own story content.`;
             }
+          } else {
+            console.error('Story generation API failed:', response.status);
+            finalContent = content; // Use original idea as fallback
           }
         } catch (error) {
           console.error('Story generation failed:', error);
+          finalContent = content; // Use original idea as fallback
         }
       }
 
@@ -1657,6 +1791,43 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
   const audioRef = useRef(null);
   const speechUtteranceRef = useRef(null);
   const highlightInterval = useRef(null);
+  
+  // Helper function to generate content for a specific chunk
+  const generateChunkContent = async (chunks, chunkIndex, artStyle, previousImageUrl, bookId) => {
+    const chunk = chunks[chunkIndex];
+    if (!chunk || chunk.imageUrl) return; // Skip if already generated
+    
+    console.log(`🎨 Generating content for chunk ${chunkIndex}:`, chunk.text.substring(0, 50) + '...');
+    
+    try {
+      // Determine previous image for character continuity
+      let referenceImage = previousImageUrl;
+      if (!referenceImage && chunkIndex > 0) {
+        // Look for the most recent chunk with an image
+        for (let i = chunkIndex - 1; i >= 0; i--) {
+          if (chunks[i]?.imageUrl) {
+            referenceImage = chunks[i].imageUrl;
+            break;
+          }
+        }
+      }
+      
+      // Generate image and audio in parallel
+      const [imageUrl, audioUrl] = await Promise.all([
+        apiService.generateImage(chunk.text, artStyle, referenceImage),
+        apiService.generateAudio(chunk.text, bookId, chunkIndex)
+      ]);
+      
+      // Update the chunk with generated content
+      chunk.imageUrl = imageUrl;
+      chunk.audioUrl = audioUrl;
+      
+      console.log(`✅ Generated content for chunk ${chunkIndex}`);
+      
+    } catch (error) {
+      console.error(`❌ Failed to generate content for chunk ${chunkIndex}:`, error);
+    }
+  };
 
   // Initialize book
   useEffect(() => {
@@ -1685,37 +1856,24 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
           firstChunk.audioUrl = audioUrl;
           setCurrentImage(imageUrl);
           
-          // Start background generation for next 2 chunks
+          // Start intelligent background generation
           if (textChunks.length > 1) {
             setLoadingProgress(0.6);
             setLoadingMessage('Preparing upcoming scenes...');
             
-            // Generate second chunk in background with character continuity
-            if (textChunks[1]) {
-              apiService.generateImage(textChunks[1].text, artStyle, firstChunk.imageUrl)
-                .then(img => {
-                  textChunks[1].imageUrl = img;
-                  return apiService.generateAudio(textChunks[1].text, currentBook.id, 1);
-                })
-                .then(audio => {
-                  textChunks[1].audioUrl = audio;
-                })
-                .catch(err => console.error('Background generation failed for chunk 1:', err));
+            // Generate the next few chunks in background with progressive loading
+            generateChunkContent(textChunks, 1, artStyle, firstChunk.imageUrl, currentBook.id);
+            
+            if (textChunks.length > 2) {
+              setTimeout(() => {
+                generateChunkContent(textChunks, 2, artStyle, null, currentBook.id);
+              }, 2000);
             }
             
-            // Generate third chunk in background with continuity
-            if (textChunks[2]) {
+            if (textChunks.length > 3) {
               setTimeout(() => {
-                apiService.generateImage(textChunks[2].text, artStyle, textChunks[1]?.imageUrl || firstChunk.imageUrl)
-                  .then(img => {
-                    textChunks[2].imageUrl = img;
-                    return apiService.generateAudio(textChunks[2].text, currentBook.id, 2);
-                  })
-                  .then(audio => {
-                    textChunks[2].audioUrl = audio;
-                  })
-                  .catch(err => console.error('Background generation failed for chunk 2:', err));
-              }, 2000); // Stagger requests
+                generateChunkContent(textChunks, 3, artStyle, null, currentBook.id);
+              }, 4000);
             }
           }
           
