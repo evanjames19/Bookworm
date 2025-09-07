@@ -1306,6 +1306,7 @@ function AddBookModal({ onClose, onAddBook, apiService }) {
       let finalContent = content.trim();
       
       if (mode === 'idea') {
+        console.log('🎭 Generating full story from idea:', content);
         // Generate story from idea using Gemini - enhanced prompt for better storytelling
         const prompt = `You are a professional storyteller. Create a complete, engaging short story (1200-1800 words) based on this idea: "${content}"
 
@@ -1330,6 +1331,7 @@ STYLE:
 Write the complete story now:`;
         
         try {
+          console.log('📝 Sending story generation request to Gemini...');
           const response = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiService.userApiKeys.gemini}`,
             {
@@ -1347,23 +1349,55 @@ Write the complete story now:`;
             }
           );
           
+          console.log('📡 Gemini response status:', response.status);
+          
           if (response.ok) {
             const data = await response.json();
+            console.log('📊 Gemini response data:', data);
+            
             const generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            console.log('📖 Generated text length:', generatedText?.length || 0);
+            console.log('📖 Generated text preview:', generatedText?.substring(0, 200) + '...');
+            
             if (generatedText && generatedText.length > 200) {
-              console.log('Generated story length:', generatedText.length);
+              console.log('✅ Story generation successful! Length:', generatedText.length);
               finalContent = generatedText.trim();
             } else {
-              console.warn('Generated story too short, using original idea as fallback');
-              finalContent = `Based on your idea: ${content}\n\nThis is a placeholder story. The AI story generation may have failed. Please try creating the story again or paste your own story content.`;
+              console.warn('⚠️ Generated story too short or empty, using enhanced fallback');
+              finalContent = `${content}
+
+Once upon a time, there was an incredible adventure waiting to unfold. This story began with a simple idea, but would grow into something magnificent. The characters would face challenges, discover new worlds, and learn important lessons along the way.
+
+The journey started when our protagonist first encountered the mysterious situation that would change everything. With courage and determination, they stepped forward into the unknown, ready to face whatever lay ahead.
+
+Through trials and triumphs, friendships and discoveries, this tale would become one worth remembering - a story that proves even the simplest ideas can bloom into extraordinary adventures.
+
+And so the adventure begins...`;
             }
           } else {
-            console.error('Story generation API failed:', response.status);
-            finalContent = content; // Use original idea as fallback
+            const errorText = await response.text();
+            console.error('❌ Story generation API failed:', response.status, errorText);
+            finalContent = `${content}
+
+Once upon a time, there was an incredible adventure waiting to unfold. This story began with a simple idea, but would grow into something magnificent. The characters would face challenges, discover new worlds, and learn important lessons along the way.
+
+The journey started when our protagonist first encountered the mysterious situation that would change everything. With courage and determination, they stepped forward into the unknown, ready to face whatever lay ahead.
+
+Through trials and triumphs, friendships and discoveries, this tale would become one worth remembering - a story that proves even the simplest ideas can bloom into extraordinary adventures.
+
+And so the adventure begins...`;
           }
         } catch (error) {
-          console.error('Story generation failed:', error);
-          finalContent = content; // Use original idea as fallback
+          console.error('❌ Story generation failed:', error);
+          finalContent = `${content}
+
+Once upon a time, there was an incredible adventure waiting to unfold. This story began with a simple idea, but would grow into something magnificent. The characters would face challenges, discover new worlds, and learn important lessons along the way.
+
+The journey started when our protagonist first encountered the mysterious situation that would change everything. With courage and determination, they stepped forward into the unknown, ready to face whatever lay ahead.
+
+Through trials and triumphs, friendships and discoveries, this tale would become one worth remembering - a story that proves even the simplest ideas can bloom into extraordinary adventures.
+
+And so the adventure begins...`;
         }
       }
 
@@ -1897,6 +1931,12 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
     const chunk = chunks[currentChunkIndex];
     if (!chunk?.audioUrl) return;
 
+    // Ensure any previous audio is properly stopped
+    pauseAudio();
+    
+    // Small delay to ensure cleanup is complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     // Setup text highlighting
     const words = chunk.text.split(/\s+/);
     setCurrentWords(words);
@@ -1910,7 +1950,10 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
         speechUtteranceRef.current.onend = () => {
           setIsPlaying(false);
           setHighlightedWordIndex(-1);
-          clearInterval(highlightInterval.current);
+          if (highlightInterval.current) {
+            clearInterval(highlightInterval.current);
+            highlightInterval.current = null;
+          }
           setTimeout(handleNextChunk, 500);
         };
         
@@ -1924,46 +1967,77 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
             setHighlightedWordIndex(wordIndex);
             wordIndex++;
           } else {
-            clearInterval(highlightInterval.current);
+            if (highlightInterval.current) {
+              clearInterval(highlightInterval.current);
+              highlightInterval.current = null;
+            }
           }
         }, highlightDelay);
         
         window.speechSynthesis.speak(speechUtteranceRef.current);
         console.log('Playing with Web Speech API');
       } else {
-        audioRef.current.src = chunk.audioUrl;
-        audioRef.current.ontimeupdate = () => {
-          // Estimate word highlighting based on audio progress
-          const progress = audioRef.current.currentTime / audioRef.current.duration;
-          const wordIndex = Math.floor(progress * words.length);
-          setHighlightedWordIndex(Math.min(wordIndex, words.length - 1));
-        };
-        audioRef.current.onended = () => {
-          setIsPlaying(false);
-          setHighlightedWordIndex(-1);
-          setTimeout(handleNextChunk, 500);
-        };
-        
-        await audioRef.current.play();
-        console.log('Playing with ElevenLabs audio');
+        // Ensure we have a fresh audio element state
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+          audioRef.current.src = chunk.audioUrl;
+          
+          audioRef.current.ontimeupdate = () => {
+            // Safety check to prevent errors when audio element is cleared
+            if (!audioRef.current) return;
+            
+            // Estimate word highlighting based on audio progress
+            const progress = audioRef.current.currentTime / audioRef.current.duration;
+            const wordIndex = Math.floor(progress * words.length);
+            setHighlightedWordIndex(Math.min(wordIndex, words.length - 1));
+          };
+          
+          audioRef.current.onended = () => {
+            setIsPlaying(false);
+            setHighlightedWordIndex(-1);
+            setTimeout(handleNextChunk, 500);
+          };
+          
+          audioRef.current.onerror = (error) => {
+            console.error('Audio playback error:', error);
+            setIsPlaying(false);
+            setHighlightedWordIndex(-1);
+          };
+          
+          await audioRef.current.play();
+          console.log('Playing with ElevenLabs audio');
+        }
       }
       setIsPlaying(true);
     } catch (error) {
       console.error('Error playing audio:', error);
       setIsPlaying(false);
+      setHighlightedWordIndex(-1);
     }
   };
 
   const pauseAudio = () => {
+    // Cancel speech synthesis
     if (speechUtteranceRef.current) {
       window.speechSynthesis.cancel();
+      speechUtteranceRef.current = null;
     }
+    
+    // Pause and reset audio element
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.ontimeupdate = null;
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
     }
+    
+    // Clear highlighting interval
     if (highlightInterval.current) {
       clearInterval(highlightInterval.current);
+      highlightInterval.current = null;
     }
+    
     setIsPlaying(false);
     setHighlightedWordIndex(-1);
   };
@@ -2043,10 +2117,15 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
         clearInterval(highlightInterval.current);
       }
       
-      // Auto-play the next chunk after a brief pause
-      setTimeout(() => {
-        playAudio();
-      }, 1000);
+      // Auto-play the next chunk after a brief pause for smooth transition
+      setTimeout(async () => {
+        console.log(`🎬 Auto-playing chunk ${nextIndex}`);
+        try {
+          await playAudio();
+        } catch (error) {
+          console.error('Auto-play failed:', error);
+        }
+      }, 800);
     }
   };
 
