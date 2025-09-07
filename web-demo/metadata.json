@@ -1,0 +1,10 @@
+{
+  "name": "VisualStory Demo",
+  "description": "AI-powered audiovisual reading experience that transforms text into immersive stories with real-time image generation and voice narration",
+  "version": "1.0.0",
+  "author": "VisualStory Team",
+  "tags": ["ai", "storytelling", "image-generation", "text-to-speech", "demo"],
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
