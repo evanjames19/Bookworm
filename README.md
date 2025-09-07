@@ -45,12 +45,19 @@
 
 3. **Configure Environment**
    
-   Create a `.env` file in the project root with your API keys:
+   Copy the example environment file and add your API keys:
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Then edit `.env` with your actual API keys:
    ```env
    ELEVENLABS_API_KEY=your_elevenlabs_key_here
    GOOGLE_API_KEY=your_google_gemini_key_here  
    ELEVENLABS_VOICE_ID=your_preferred_voice_id
    ```
+   
+   ⚠️ **Security Note**: Never commit your `.env` file to version control. The `.gitignore` file is configured to exclude it automatically.
 
 4. **Start Development Server**
    ```bash
@@ -242,6 +249,14 @@ DEBUG_MODE=false
 - **Memory Management**: Efficient asset loading and cleanup
 - **Network Resilience**: Offline fallbacks and retry logic
 - **Battery Optimization**: Intelligent background processing
+
+## 🔒 Security & Privacy
+
+- **API Key Protection**: All sensitive keys are stored in `.env` files (excluded from git)
+- **Local Storage**: Books and generated content stay on your device
+- **No Data Collection**: Zero telemetry or user tracking
+- **Secure Communication**: All API calls use HTTPS encryption
+- **Environment Isolation**: Development and production keys kept separate
 
 ## 🛠️ Troubleshooting
 
