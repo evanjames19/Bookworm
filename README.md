@@ -1,4 +1,4 @@
-# 🎭 VisualStory App
+# Bookworm
 
 **Transform any book into an immersive audiovisual experience with AI-powered narration and real-time image generation.**
 
@@ -286,15 +286,6 @@ npm install
 
 ### Debug Mode
 Enable detailed logging by setting `DEBUG_MODE=true` in your `.env` file.
-
-## 🏆 Competition Highlights
-
-- **Innovation**: First-of-its-kind audiovisual book experience
-- **Technical Excellence**: Modern React Native with TypeScript
-- **User Experience**: Intuitive interface with professional polish
-- **Scalability**: Modular architecture ready for expansion
-- **Performance**: Optimized for smooth real-time generation
-- **Cross-platform**: Single codebase, multiple platforms
 
 ## 📄 License
 
