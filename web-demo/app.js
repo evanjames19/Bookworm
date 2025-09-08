@@ -1294,13 +1294,14 @@ function BookwormLibrary({ apiService, books, onSelectBook, onAddBook }) {
 function AddBookModal({ onClose, onAddBook, apiService }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [mode, setMode] = useState('paste'); // 'paste' or 'idea'
+  const [mode, setMode] = useState('idea'); // 'paste' or 'idea' - default to idea mode
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim() || !content.trim()) return;
 
+    console.log('📝 Creating book with mode:', mode, 'title:', title, 'content length:', content.length);
     setIsGenerating(true);
     try {
       let finalContent = content.trim();
@@ -1929,10 +1930,10 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
     initializeBook();
   }, [currentBook, apiService, artStyle]);
 
-  const playAudio = async () => {
-    const chunk = chunks[currentChunkIndex];
+  const playAudio = async (chunkIndex = currentChunkIndex) => {
+    const chunk = chunks[chunkIndex];
     if (!chunk?.audioUrl) {
-      console.warn('⚠️ No audio URL for chunk:', currentChunkIndex);
+      console.warn('⚠️ No audio URL for chunk:', chunkIndex);
       return;
     }
 
@@ -1942,7 +1943,7 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
       return;
     }
 
-    console.log(`🎵 Playing audio for chunk ${currentChunkIndex}:`, chunk.text.substring(0, 50) + '...');
+    console.log(`🎵 Playing audio for chunk ${chunkIndex}:`, chunk.text.substring(0, 50) + '...');
 
     // Ensure any previous audio is properly stopped
     pauseAudio();
@@ -2153,11 +2154,14 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
       setHighlightedWordIndex(-1);
       setCurrentWords([]);
       
+      console.log(`📱 UI state updated - chunk index: ${nextIndex}, image: ${nextChunk.imageUrl ? 'loaded' : 'missing'}`);
+      
       // Auto-play the next chunk after a brief pause for smooth transition
       autoPlayTimeoutRef.current = setTimeout(async () => {
         console.log(`🎬 Auto-playing chunk ${nextIndex}`);
         try {
-          await playAudio();
+          console.log(`🔍 State check before playAudio - currentChunkIndex: ${currentChunkIndex}, nextIndex: ${nextIndex}`);
+          await playAudio(nextIndex);
         } catch (error) {
           console.error('Auto-play failed:', error);
         } finally {
