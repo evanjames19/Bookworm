@@ -1827,6 +1827,7 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
   const speechUtteranceRef = useRef(null);
   const highlightInterval = useRef(null);
   const autoPlayTimeoutRef = useRef(null);
+  const transitionTimeoutRef = useRef(null);
   const isTransitioningRef = useRef(false);
   
   // Helper function to generate content for a specific chunk
@@ -1969,9 +1970,12 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
             clearInterval(highlightInterval.current);
             highlightInterval.current = null;
           }
-          // Only transition if not already transitioning
-          if (!isTransitioningRef.current) {
-            setTimeout(handleNextChunk, 500);
+          // Only transition if not already transitioning and no pending transition
+          if (!isTransitioningRef.current && !transitionTimeoutRef.current) {
+            transitionTimeoutRef.current = setTimeout(() => {
+              transitionTimeoutRef.current = null;
+              handleNextChunk();
+            }, 500);
           }
         };
         
@@ -2015,9 +2019,14 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
             console.log('🔊 Audio playback ended');
             setIsPlaying(false);
             setHighlightedWordIndex(-1);
-            // Only transition if not already transitioning
-            if (!isTransitioningRef.current) {
-              setTimeout(handleNextChunk, 500);
+            // Only transition if not already transitioning and no pending transition
+            if (!isTransitioningRef.current && !transitionTimeoutRef.current) {
+              transitionTimeoutRef.current = setTimeout(() => {
+                transitionTimeoutRef.current = null;
+                handleNextChunk();
+              }, 500);
+            } else {
+              console.log('🚫 Transition blocked - already transitioning or timeout pending');
             }
           };
           
@@ -2060,10 +2069,15 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
       highlightInterval.current = null;
     }
     
-    // Clear auto-play timeout
+    // Clear all timeouts
     if (autoPlayTimeoutRef.current) {
       clearTimeout(autoPlayTimeoutRef.current);
       autoPlayTimeoutRef.current = null;
+    }
+    
+    if (transitionTimeoutRef.current) {
+      clearTimeout(transitionTimeoutRef.current);
+      transitionTimeoutRef.current = null;
     }
     
     setIsPlaying(false);
