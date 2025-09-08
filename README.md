@@ -2,6 +2,8 @@
 
 **Transform any book into an immersive audiovisual experience with AI-powered narration and real-time image generation.**
 
+Cloud Build: https://bookworm-790467113059.northamerica-northeast1.run.app/
+
 > A competition-ready React Native application that creates cinematic storytelling experiences by combining AI-generated visuals with high-quality voice narration.
 
 ## 🌟 Features
