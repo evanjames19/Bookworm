@@ -428,18 +428,70 @@ function chunkText(text) {
       currentChunk += (currentChunk ? '\n\n' : '') + trimmedParagraph;
       currentWordCount += paragraphWords;
       
-      // If we've reached target size and have meaningful content, create chunk
+      // If we've reached target size, try to find a good sentence boundary
       if (currentWordCount >= CHUNK_TARGET_SIZE && currentWordCount >= MIN_CHUNK_SIZE) {
-        chunks.push({
-          id: `chunk_${chunkId++}`,
-          text: currentChunk.trim(),
-          audioUrl: null,
-          imageUrl: null
-        });
+        // Try to split at a sentence boundary if possible
+        const chunkText = currentChunk.trim();
+        const sentences = chunkText.split(/(?<=[.!?])\s+/);
         
-        // Reset for next chunk
-        currentChunk = '';
-        currentWordCount = 0;
+        if (sentences.length > 1) {
+          // Find the best split point around our target size
+          let bestSplit = 0;
+          let currentWordCount = 0;
+          
+          for (let i = 0; i < sentences.length; i++) {
+            const sentenceWords = sentences[i].split(/\s+/).length;
+            if (currentWordCount + sentenceWords <= CHUNK_TARGET_SIZE * 1.5) { // Allow 50% overage
+              bestSplit = i + 1;
+              currentWordCount += sentenceWords;
+            } else {
+              break;
+            }
+          }
+          
+          if (bestSplit > 0) {
+            // Create chunk with complete sentences
+            const finalChunkText = sentences.slice(0, bestSplit).join(' ').trim();
+            console.log(`📝 Creating chunk ${chunkId} with ${finalChunkText.split(/\s+/).length} words, ends with: "${finalChunkText.slice(-20)}"`);
+            chunks.push({
+              id: `chunk_${chunkId++}`,
+              text: finalChunkText,
+              audioUrl: null,
+              imageUrl: null
+            });
+            
+            // Start next chunk with remaining sentences
+            const remainingSentences = sentences.slice(bestSplit);
+            if (remainingSentences.length > 0) {
+              currentChunk = remainingSentences.join(' ').trim();
+              currentWordCount = currentChunk.split(/\s+/).length;
+              console.log(`🔄 Next chunk starts with: "${currentChunk.substring(0, 30)}..."`);
+            } else {
+              currentChunk = '';
+              currentWordCount = 0;
+            }
+          } else {
+            // Fallback: use the whole chunk as-is
+            chunks.push({
+              id: `chunk_${chunkId++}`,
+              text: chunkText,
+              audioUrl: null,
+              imageUrl: null
+            });
+            currentChunk = '';
+            currentWordCount = 0;
+          }
+        } else {
+          // Single sentence or no good split points, use as-is
+          chunks.push({
+            id: `chunk_${chunkId++}`,
+            text: chunkText,
+            audioUrl: null,
+            imageUrl: null
+          });
+          currentChunk = '';
+          currentWordCount = 0;
+        }
       }
     }
   }
@@ -501,9 +553,10 @@ function chunkBySentences(text) {
       currentChunk += (currentChunk ? ' ' : '') + trimmedSentence;
       currentWordCount += sentenceWords;
       
-      // Create chunk if we've reached target size OR have multiple sentences
-      if (currentWordCount >= CHUNK_TARGET_SIZE || 
-          (currentWordCount >= 30 && currentChunk.includes('.') && currentChunk.split(/[.!?]/).length >= 2)) {
+      // Create chunk if we've reached target size AND have complete sentences
+      const hasCompleteSentences = /[.!?]\s*$/.test(currentChunk.trim());
+      if ((currentWordCount >= CHUNK_TARGET_SIZE && hasCompleteSentences) || 
+          currentWordCount >= MAX_CHUNK_SIZE) {
         chunks.push({
           id: `chunk_${chunkId++}`,
           text: currentChunk.trim(),
@@ -1979,9 +2032,10 @@ function BookwormReader({ apiService, currentBook, artStyle = 'realistic', onBac
           }
         };
         
-        // Start word highlighting animation
-        const wordsPerSecond = 3; // Approximate reading speed
-        const highlightDelay = 1000 / wordsPerSecond;
+        // Start word highlighting animation - adjust for speech rate
+        const baseWordsPerSecond = 2.2; // More accurate base rate for speech synthesis
+        const adjustedWordsPerSecond = baseWordsPerSecond * speechUtteranceRef.current.rate; // Account for rate setting
+        const highlightDelay = 1000 / adjustedWordsPerSecond;
         let wordIndex = 0;
         
         highlightInterval.current = setInterval(() => {
