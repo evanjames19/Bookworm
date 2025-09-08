@@ -68,7 +68,9 @@ class WebApiService {
   }
 
   async generateAudio(text, bookId = null, chunkIndex = 0) {
-    console.log('Generating audio for:', text.substring(0, 50) + '...');
+    console.log('🎤 Generating audio for chunk', chunkIndex, '- Full text length:', text.length, 'characters');
+    console.log('🎤 Text preview:', text.substring(0, 100) + '...');
+    console.log('🎤 Text ending:', '...' + text.substring(text.length - 50));
     
     if (!this.userApiKeys.elevenlabs) {
       console.log('Using Web Speech API fallback');
@@ -76,6 +78,16 @@ class WebApiService {
     }
 
     try {
+      // ElevenLabs supports up to 5000 characters per request
+      const maxLength = 4900; // Leave some buffer
+      const textToSend = text.length > maxLength ? text.substring(0, maxLength) : text;
+      
+      if (text.length > maxLength) {
+        console.warn(`⚠️ Text truncated from ${text.length} to ${maxLength} characters for ElevenLabs`);
+      }
+      
+      console.log('🎤 Sending to ElevenLabs:', textToSend.length, 'characters');
+      
       const response = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${this.userApiKeys.elevenlabsVoice}`,
         {
@@ -86,7 +98,7 @@ class WebApiService {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            text: text.substring(0, 500),
+            text: textToSend,
             model_id: 'eleven_multilingual_v2',
             voice_settings: {
               stability: 0.5,
